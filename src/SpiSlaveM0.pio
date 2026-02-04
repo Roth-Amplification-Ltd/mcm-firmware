@@ -1,0 +1,19 @@
+.program spi_slave_m0_msb
+; NOTE: placeholder program text; will compile once pins are finalized in this .pio.
+.wrap_target
+    ; wait for CS low (placeholder pin 0)
+    wait 0 pin 0
+    ; wait for SCK low (placeholder pin 0)
+    wait 0 pin 0
+byte_loop:
+    pull noblock
+    out pins, 1
+    set x, 6
+bit_loop:
+    wait 1 pin 0
+    wait 0 pin 0
+    out pins, 1
+    jmp x-- bit_loop
+    jmp pin 0
+    jmp byte_loop
+.wrap

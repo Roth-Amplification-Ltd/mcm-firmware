@@ -1,4 +1,3 @@
-
 #pragma once
 #include <Arduino.h>
 #include "TransportProtocol.h"
@@ -9,7 +8,7 @@ public:
   StatePublisher(EventQueue<16>& q) : _q(q), _ready(false) {}
   void service();
   bool hasPacket() const { return _ready; }
-  bool popPacket(uint8_t* out);
+  bool popPacket(uint8_t* out8);
 private:
   EventQueue<16>& _q;
   bool _ready;

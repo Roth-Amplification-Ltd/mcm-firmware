@@ -1,4 +1,3 @@
-
 #pragma once
 #include <Arduino.h>
 
@@ -33,6 +32,7 @@ public:
     _count--;
     return true;
   }
+  bool empty() const { return _count == 0; }
 private:
   Event _buf[SIZE];
   uint8_t _head, _tail, _count;

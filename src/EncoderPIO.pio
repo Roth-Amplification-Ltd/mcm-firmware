@@ -1,0 +1,13 @@
+.program encoder_state_stream
+.wrap_target
+    in   pins, 2
+    mov  x, isr
+loop:
+    in   pins, 2
+    mov  y, isr
+    jmp  x == y, loop
+    mov  x, y
+    mov  isr, y
+    push block
+    jmp  loop
+.wrap

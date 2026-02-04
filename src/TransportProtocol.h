@@ -1,4 +1,3 @@
-
 #pragma once
 #include <Arduino.h>
 
@@ -17,7 +16,7 @@ static inline uint8_t proto_crc8(const uint8_t* data, uint8_t len)
   for (uint8_t i = 0; i < len; i++) {
     crc ^= data[i];
     for (uint8_t b = 0; b < 8; b++) {
-      crc = (crc & 0x80) ? (crc << 1) ^ 0x07 : (crc << 1);
+      crc = (crc & 0x80) ? (uint8_t)((crc << 1) ^ 0x07) : (uint8_t)(crc << 1);
     }
   }
   return crc;
