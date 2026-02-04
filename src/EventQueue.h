@@ -17,23 +17,16 @@ struct Event {
 template <uint8_t SIZE>
 class EventQueue {
 public:
-  EventQueue() : _head(0), _tail(0), _count(0) {}
+  EventQueue() : h(0), t(0), c(0) {}
   bool push(const Event& e) {
-    if (_count >= SIZE) return false;
-    _buf[_head] = e;
-    _head = (_head + 1) % SIZE;
-    _count++;
-    return true;
+    if (c >= SIZE) return false;
+    buf[h] = e; h = (h + 1) % SIZE; c++; return true;
   }
-  bool pop(Event& out) {
-    if (_count == 0) return false;
-    out = _buf[_tail];
-    _tail = (_tail + 1) % SIZE;
-    _count--;
-    return true;
+  bool pop(Event& o) {
+    if (c == 0) return false;
+    o = buf[t]; t = (t + 1) % SIZE; c--; return true;
   }
-  bool empty() const { return _count == 0; }
 private:
-  Event _buf[SIZE];
-  uint8_t _head, _tail, _count;
+  Event buf[SIZE];
+  uint8_t h, t, c;
 };
