@@ -1,43 +1,72 @@
 .program spi_slave_m0_msb_rx
 
 ; =========================================================================================
-; SPI SLAVE MODE 0 (CPOL=0, CPHA=0) WITH RX + TX
+; SPI SLAVE (MODE 0, MSB-FIRST) WITH RX + TX  —  FINAL PINS + ROBUST BYTE CAPTURE
+; =========================================================================================
+; ABSOLUTE GPIO PINS (baked in by request):
+;   SCK   = GPIO12  (idle LOW)
+;   CS    = GPIO13  (active LOW)
+;   MISO  = GPIO14  (output)
+;   MOSI  = GPIO15  (input)
 ;
-; Pins (absolute GPIO):
-;   SCK   = GPIO12
-;   CS    = GPIO13 (active low)
-;   MISO  = GPIO14
-;   MOSI  = GPIO15
+; MODE 0 TIMING CONTRACT
+; ----------------------
+; - Master samples on RISING edge of SCK
+; - Slave must change MISO on FALLING edge (so next bit is stable for rising)
+; - The *first* MISO bit must be presented immediately after CS goes LOW,
+;   BEFORE the first rising edge occurs.
 ;
-; Contract:
-;   - CS low  -> exactly 8 bytes clocked
-;   - CS high -> frame reset
+; TRANSACTION CONTRACT (MOST ROBUST)
+; ---------------------------------
+; - CS LOW  -> master clocks EXACTLY 8 bytes (64 SCK pulses)
+; - CS HIGH -> frame boundary / reset
 ;
-; Behavior:
-;   - Sample MOSI on rising edge
-;   - Shift MISO on falling edge
-;   - RX bytes pushed to RX FIFO
+; RX BEHAVIOR
+; -----------
+; - MOSI sampled on each rising edge
+; - Bits assembled MSB-first
+; - After 8 bits, we PUSH one 32-bit word to RX FIFO with the received byte
+;   located in bits 31..24. (C++ extracts (word >> 24) & 0xFF)
+;
+; TX BEHAVIOR
+; -----------
+; - One byte is pulled (noblock) per transmitted byte.
+; - If TX FIFO empty, last OSR contents repeat (safe default).
+; - C++ loads each byte as (byte << 24) so MSB-first works with shift-left OUT.
 ; =========================================================================================
 
 .wrap_target
 
-wait_cs:
-    wait 0 pin 13        ; CS low
-    wait 0 pin 12        ; SCK low
+wait_cs_low:
+    wait 0 pin 13              ; CS asserted (LOW)
+    wait 0 pin 12              ; ensure SCK LOW (CPOL=0)
 
 byte_loop:
-    pull noblock         ; TX byte (repeat last if none)
+    ; --- TX side: pull next byte (or repeat if none) ---
+    pull noblock               ; OSR unchanged if empty
+    out  pins, 1               ; PRESENT FIRST MISO BIT *IMMEDIATELY* (before first rising)
+
+    ; --- RX side: clear ISR so we assemble a fresh byte ---
+    mov  isr, null
+
+    ; We already output 1 bit. We still must SAMPLE 8 bits from MOSI.
+    ; We'll do 8 rising-edge samples. Use X = 7 to loop 8 times (0..7).
     set x, 7
 
 bit_loop:
-    wait 1 pin 12        ; rising edge
-    in  pins, 1          ; sample MOSI
-    wait 0 pin 12        ; falling edge
-    out pins, 1          ; shift MISO
-    jmp x-- bit_loop
+    wait 1 pin 12              ; rising edge
+    in   pins, 1               ; sample MOSI (configured with in_base = GPIO15)
+    wait 0 pin 12              ; falling edge
+    out  pins, 1               ; update MISO on falling edge
+    jmp  x-- bit_loop
 
-    push block           ; push RX byte
-    jmp pin 13 wait_cs
-    jmp byte_loop
+    ; Push the RX byte. With shift-right IN config, the byte lands at bits31..24.
+    push block
+
+    ; If CS went HIGH, end frame and restart.
+    jmp  pin 13 wait_cs_low
+
+    ; Otherwise, next byte in this CS frame.
+    jmp  byte_loop
 
 .wrap

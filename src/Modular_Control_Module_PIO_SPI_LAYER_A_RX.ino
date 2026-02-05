@@ -9,6 +9,19 @@
 #include "ParamBinding.h"
 #include "CommandDispatcher.h"
 
+/*****************************************************************************************
+ *  DEMO PARAMS (placeholder)
+ *  ------------------------
+ *  Your real firmware likely has many more params mapped to encoders.
+ *  This sketch demonstrates:
+ *    - Master->Slave commands over SPI MOSI (CS-framed)
+ *    - Slave->Master state packets over SPI MISO
+ *    - IRQ pin asserted HIGH when TX packets are pending
+ *
+ *  IRQ PIN:
+ *    GPIO11 (Pin 14) active HIGH
+ *****************************************************************************************/
+
 static Param params[] = {
   { "Param0", 0, 0, 0, 127, 1, 1, false },
   { "Param1", 64, 64, 0, 127, 1, 1, false },
@@ -23,12 +36,16 @@ static CommandDispatcher dispatcher(params, NUM_PARAMS, eventQueue);
 
 void setup() {
   Serial.begin(115200);
+  delay(200);
+  Serial.println("MCM: CS-framed SPI RX + IRQ data-ready (active HIGH on GPIO11)");
   spi.begin();
 }
 
 void loop() {
-  // --- SPI RX -> Command Dispatcher ---
+  // Always service the transport frequently (drains RX FIFO + feeds TX FIFO)
   spi.service();
+
+  // ----------------- RX: MOSI -> Command Dispatcher -----------------
   if (spi.hasRxPacket()) {
     uint8_t pkt[8];
     if (spi.popRxPacket(pkt)) {
@@ -36,12 +53,15 @@ void loop() {
     }
   }
 
-  // --- State publish path ---
+  // ----------------- Publish pipeline: Events -> Packets -> TX Queue -----------------
   publisher.service();
   if (publisher.hasPacket()) {
     uint8_t pkt[8];
     if (publisher.popPacket(pkt)) {
-      spi.loadTxPacket(pkt);
+      // Enqueue for TX; if queue is full, packet is dropped (rare; can tune depth)
+      spi.enqueueTxPacket(pkt);
     }
   }
+
+  // NOTE: IRQ pin is managed automatically inside TransportSPI based on TX queue.
 }
