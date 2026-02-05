@@ -6,5 +6,5 @@ struct Param {
   int32_t minValue, maxValue;
   int32_t baseStep, fineStep;
   bool wrap;
-  void resetToDefault(){ value = defValue; }
+  void resetToDefault() { value = defValue; }
 };
