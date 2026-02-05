@@ -1,19 +1,43 @@
-.program spi_slave_m0_msb
-; NOTE: placeholder program text; will compile once pins are finalized in this .pio.
+.program spi_slave_m0_msb_rx
+
+; =========================================================================================
+; SPI SLAVE MODE 0 (CPOL=0, CPHA=0) WITH RX + TX
+;
+; Pins (absolute GPIO):
+;   SCK   = GPIO12
+;   CS    = GPIO13 (active low)
+;   MISO  = GPIO14
+;   MOSI  = GPIO15
+;
+; Contract:
+;   - CS low  -> exactly 8 bytes clocked
+;   - CS high -> frame reset
+;
+; Behavior:
+;   - Sample MOSI on rising edge
+;   - Shift MISO on falling edge
+;   - RX bytes pushed to RX FIFO
+; =========================================================================================
+
 .wrap_target
-    ; wait for CS low (placeholder pin 0)
-    wait 0 pin 0
-    ; wait for SCK low (placeholder pin 0)
-    wait 0 pin 0
+
+wait_cs:
+    wait 0 pin 13        ; CS low
+    wait 0 pin 12        ; SCK low
+
 byte_loop:
-    pull noblock
-    out pins, 1
-    set x, 6
+    pull noblock         ; TX byte (repeat last if none)
+    set x, 7
+
 bit_loop:
-    wait 1 pin 0
-    wait 0 pin 0
-    out pins, 1
+    wait 1 pin 12        ; rising edge
+    in  pins, 1          ; sample MOSI
+    wait 0 pin 12        ; falling edge
+    out pins, 1          ; shift MISO
     jmp x-- bit_loop
-    jmp pin 0
+
+    push block           ; push RX byte
+    jmp pin 13 wait_cs
     jmp byte_loop
+
 .wrap

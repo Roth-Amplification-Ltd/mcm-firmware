@@ -9,15 +9,11 @@
 #include "ParamBinding.h"
 #include "CommandDispatcher.h"
 
-// -----------------------------------------------------------------------------
-// Example parameter table (placeholder)
-// -----------------------------------------------------------------------------
 static Param params[] = {
   { "Param0", 0, 0, 0, 127, 1, 1, false },
   { "Param1", 64, 64, 0, 127, 1, 1, false },
   { "Param2", 32, 32, 0, 127, 1, 1, false }
 };
-
 static const uint8_t NUM_PARAMS = sizeof(params) / sizeof(params[0]);
 
 static EventQueue<16> eventQueue;
@@ -31,17 +27,21 @@ void setup() {
 }
 
 void loop() {
-  // --- RX path (placeholder hook) ---
-  // In the next iteration, TransportSPI will expose RX packet retrieval.
-  // For now, commands are injected via SPI test harness.
+  // --- SPI RX -> Command Dispatcher ---
+  spi.service();
+  if (spi.hasRxPacket()) {
+    uint8_t pkt[8];
+    if (spi.popRxPacket(pkt)) {
+      dispatcher.handlePacket(pkt);
+    }
+  }
 
-  // --- TX path ---
+  // --- State publish path ---
   publisher.service();
   if (publisher.hasPacket()) {
     uint8_t pkt[8];
     if (publisher.popPacket(pkt)) {
-      spi.loadPacket(pkt);
+      spi.loadTxPacket(pkt);
     }
   }
-  spi.service();
 }
