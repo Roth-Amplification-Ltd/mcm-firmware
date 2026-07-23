@@ -1,13 +1,14 @@
 #include "StatePublisher.h"
 
 static inline void enc24(int32_t v, uint8_t& b0, uint8_t& b1, uint8_t& b2) {
-  b0 = v & 0xFF;
-  b1 = (v >> 8) & 0xFF;
-  b2 = (v >> 16) & 0xFF;
+  b0 = (uint8_t)(v & 0xFF);
+  b1 = (uint8_t)((v >> 8) & 0xFF);
+  b2 = (uint8_t)((v >> 16) & 0xFF);
 }
 
 void StatePublisher::service() {
   if (_ready) return;
+
   Event ev;
   if (!_q.pop(ev)) return;
 
@@ -20,16 +21,24 @@ void StatePublisher::service() {
       _pkt[3] = ev.index;
       enc24(ev.value, _pkt[4], _pkt[5], _pkt[6]);
       break;
+
     case EVT_SNAPSHOT_BEGIN:
       _pkt[2] = MSG_SNAPSHOT_BEGIN;
-      _pkt[3] = ev.index;
-      enc24(ev.value, _pkt[4], _pkt[5], _pkt[6]);
+      _pkt[3] = ev.index; // param_count
+      enc24(ev.value, _pkt[4], _pkt[5], _pkt[6]); // reserved
       break;
+
     case EVT_SNAPSHOT_END:
       _pkt[2] = MSG_SNAPSHOT_END;
-      _pkt[3] = ev.index;
-      enc24(ev.value, _pkt[4], _pkt[5], _pkt[6]);
+      _pkt[3] = ev.index; // param_count
+      enc24(ev.value, _pkt[4], _pkt[5], _pkt[6]); // reserved
+
+      // Layer D: snapshot flow-control release point.
+      // We clear the flag when END is SERIALIZED so snapshots never overlap
+      // in the published stream.
+      _flow.snapshot_in_progress = false;
       break;
+
     default:
       return;
   }

@@ -8,6 +8,7 @@
 #include "TransportSPI.h"
 #include "ParamBinding.h"
 #include "CommandDispatcher.h"
+#include "SnapshotFlow.h"
 
 /*****************************************************************************************
  *  DEMO PARAMS (placeholder)
@@ -30,9 +31,10 @@ static Param params[] = {
 static const uint8_t NUM_PARAMS = sizeof(params) / sizeof(params[0]);
 
 static EventQueue<16> eventQueue;
-static StatePublisher publisher(eventQueue);
+static SnapshotFlowState snapshotFlow;
+static StatePublisher publisher(eventQueue, snapshotFlow);
 static TransportSPI   spi;
-static CommandDispatcher dispatcher(params, NUM_PARAMS, eventQueue);
+static CommandDispatcher dispatcher(params, NUM_PARAMS, eventQueue, snapshotFlow);
 
 void setup() {
   Serial.begin(115200);
@@ -49,7 +51,27 @@ void loop() {
   if (spi.hasRxPacket()) {
     uint8_t pkt[8];
     if (spi.popRxPacket(pkt)) {
-      dispatcher.handlePacket(pkt);
+            // Layer D: RESYNC command is special because it must clear BOTH:
+      //   1) the internal event queue (drop stale events)
+      //   2) the transport TX queue (drop stale outbound packets)
+      //
+      // Then it immediately queues a fresh framed snapshot so the master can
+      // re-establish an authoritative baseline.
+      if (pkt[2] == MSG_CMD_RESYNC) {
+        // Drop any pending outbound data and deassert IRQ immediately.
+        spi.clearTxQueue();
+
+        // Drop pending internal events (including any partial snapshot).
+        eventQueue.clear();
+
+        // Reset snapshot flow state so a new snapshot can be queued cleanly.
+        snapshotFlow.snapshot_in_progress = false;
+
+        // Queue a fresh framed snapshot (BEGIN, PARAM_STATE×N, END).
+        dispatcher.requestSnapshot();
+      } else {
+        dispatcher.handlePacket(pkt);
+      }
     }
   }
 

@@ -18,6 +18,7 @@ template <uint8_t N>
 class EventQueue {
 public:
   EventQueue() : h(0), t(0), c(0) {}
+
   bool push(const Event& e) {
     if (c >= N) return false;
     b[h] = e;
@@ -25,6 +26,7 @@ public:
     c++;
     return true;
   }
+
   bool pop(Event& o) {
     if (c == 0) return false;
     o = b[t];
@@ -32,6 +34,15 @@ public:
     c--;
     return true;
   }
+
+  // Layer D helper: drop all pending events (used during RESYNC).
+  void clear() {
+    h = 0; t = 0; c = 0;
+  }
+
+  bool empty() const { return c == 0; }
+  uint8_t count() const { return c; }
+
 private:
   Event b[N];
   uint8_t h, t, c;
