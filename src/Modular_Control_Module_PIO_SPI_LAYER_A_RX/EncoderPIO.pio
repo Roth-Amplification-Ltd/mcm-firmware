@@ -1,13 +1,28 @@
 .program encoder_state_stream
+
+; =============================================================================
+; TWO-PIN ENCODER STATE-CHANGE STREAM
+; =============================================================================
+; IN base is configured to the lower-numbered pin of one consecutive A/B pair.
+; The program continuously samples both bits and pushes only when the two-bit
+; state differs from the prior sample. Direction is decoded in C++ using the
+; caller's semantic A/B ordering.
+;
+; This program reports state changes, not detents and not direction. Mechanical
+; bounce and illegal jumps are handled by the C++ transition table.
+; =============================================================================
+
 .wrap_target
-    in   pins, 2
-    mov  x, isr
-loop:
-    in   pins, 2
-    mov  y, isr
-    jmp  x == y, loop
-    mov  x, y
-    mov  isr, y
-    push block
-    jmp  loop
+    in   pins, 2               ; capture initial two-bit state
+    mov  x, isr                ; X holds previous sample
+
+sample_loop:
+    in   pins, 2               ; capture current two-bit state
+    mov  y, isr                ; Y holds current sample
+    jmp  x == y, sample_loop   ; do not fill FIFO with unchanged samples
+
+    mov  x, y                  ; current sample becomes previous sample
+    mov  isr, y                ; place reported sample in ISR for PUSH
+    push block                 ; stall rather than silently lose the sample
+    jmp  sample_loop
 .wrap

@@ -1,0 +1,13 @@
+# Request sent by the master. The decoder ignores command packets.
+A5 01 81 00 00 00 00 5D
+
+# Response sequence ID 0x1234.
+A5 01 10 06 34 12 00 D9
+A5 01 01 00 00 00 00 CA
+A5 01 01 01 0C 00 00 26
+A5 01 01 02 FD FF FF 3F
+A5 01 01 03 7F 00 00 D0
+A5 01 01 04 80 FF FF BD
+A5 01 01 05 00 04 00 D0
+A5 01 02 00 2A 08 06 12
+A5 01 11 06 34 12 00 BB

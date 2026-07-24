@@ -1,52 +1,26 @@
 #pragma once
 #include <Arduino.h>
 
-/*****************************************************************************************
+/**
+ * @struct SnapshotFlowState
+ * @brief Shared guard preventing two snapshot event sequences from interleaving.
  *
- * SnapshotFlowState
- * =================
- * Tiny shared state object used to coordinate "snapshot in progress" logic
- * between:
- *   - CommandDispatcher (producer of snapshot events)
- *   - StatePublisher    (serializer of snapshot events -> wire packets)
+ * CommandDispatcher sets snapshot_in_progress before enqueueing BEGIN/state/END.
+ * StatePublisher clears it when the END event is serialized into a packet.
  *
- * Why do we need this?
- * --------------------
- * A snapshot is NOT a single packet; it is an ordered sequence:
- *
- *    SNAPSHOT_BEGIN
- *    PARAM_STATE x N
- *    SNAPSHOT_END
- *
- * We must ensure we never interleave two snapshots like this:
- *
- *    SNAPSHOT_BEGIN (A)
- *    PARAM_STATE ...
- *    SNAPSHOT_BEGIN (B)   <-- BAD: overlapping snapshots
- *    ...
- *    SNAPSHOT_END (A)
- *    SNAPSHOT_END (B)
- *
- * The simplest robust rule is:
- *   "Once we have queued a snapshot, do not queue another snapshot until
- *    the previous snapshot END event has been serialized by StatePublisher."
- *
- * NOTE:
- * - We intentionally clear the 'in progress' flag when SNAPSHOT_END is
- *   SERIALIZED (i.e., converted into a wire packet). We do NOT wait until the
- *   master has physically clocked the END packet. That's okay because:
- *     - ordering in the TX FIFO remains correct
- *     - snapshots will appear back-to-back, not interleaved
- *     - the master can always issue RESYNC if it loses its place
- *
- *****************************************************************************************/
-
+ * This guarantees ordering in the software publication stream, but it does not
+ * prove the END packet was physically clocked by the master. The transport may
+ * still hold the END bytes in its software queue or PIO FIFO.
+ */
 struct SnapshotFlowState {
   volatile bool snapshot_in_progress = false;
 
-  // Reserved for future expansion:
-  // - sequence ID (increment per snapshot)
-  // - snapshot checksum accumulation
-  // - rate limiting / throttling
+  /**
+   * Reserved sequence counter.
+   *
+   * The dispatcher increments this field, but the current packet serializer
+   * does not transmit it. The coherent snapshot v1.1 proposal defines how a
+   * sequence ID should appear on the wire.
+   */
   uint8_t seq_id = 0;
 };

@@ -1,31 +1,68 @@
 .program spi_slave_m0_msb_rx
 
-; SPI Mode 0, MSB-first peripheral transport.
-; External GPIO assignments are fixed by the MCM KiCad design:
-;   GPIO12 SCK, GPIO13 CS, GPIO14 MISO, GPIO15 MOSI.
+; =============================================================================
+; MCM EXTERNAL SPI PERIPHERAL — MODE 0, MSB-FIRST, FULL DUPLEX
+; =============================================================================
 ;
-; WAIT GPIO uses absolute GPIO numbers. JMP PIN uses the state machine's
-; configured jump pin, which TransportSPI::begin() sets to GPIO13 / SPI_CS.
+; Hardware map fixed by the current KiCad design:
+;   GPIO12 = SCK  (master -> MCM, idle low)
+;   GPIO13 = CS   (master -> MCM, active low)
+;   GPIO14 = MISO (MCM -> master)
+;   GPIO15 = MOSI (master -> MCM)
+;
+; C++ state-machine configuration:
+;   IN base  = GPIO15 / MOSI
+;   OUT base = GPIO14 / MISO
+;   JMP pin  = GPIO13 / CS
+;   OUT shift left, manual pull
+;   IN shift right, manual push
+;
+; Framing contract:
+;   - one CS assertion carries exactly eight bytes;
+;   - software accepts an RX packet only when eight bytes were captured;
+;   - the master samples MISO on SCK rising edges;
+;   - the MCM changes MISO on SCK falling edges;
+;   - the first MISO bit must be driven before the first rising edge.
+;
+; PIO syntax detail:
+;   WAIT GPIO uses an absolute GPIO number.
+;   JMP PIN tests the state machine's configured JMP pin. It does not take a
+;   GPIO operand in this program. TransportSPI::begin() configures GPIO13.
+; =============================================================================
 
 .wrap_target
+
 wait_cs_low:
-    wait 0 gpio 13             ; CS asserted
-    wait 0 gpio 12             ; Mode 0 idle clock state
+    wait 0 gpio 13             ; block until active-low CS is asserted
+    wait 0 gpio 12             ; require Mode-0 idle clock before byte start
 
 byte_loop:
+    ; Pull the next TX word when available. NOBLOCK retains the existing OSR if
+    ; the FIFO is empty, so idle/filler output is whatever remains in the OSR.
     pull noblock
-    out  pins, 1               ; present first MISO bit before rising edge
+
+    ; Preload bit 7 immediately. The master will sample it on the first rising
+    ; edge, so waiting for a falling edge would shift the entire byte by one bit.
+    out  pins, 1
+
+    ; Start one fresh received byte and configure eight rising-edge samples.
     mov  isr, null
     set  x, 7
 
 bit_loop:
-    wait 1 gpio 12             ; sample MOSI on rising edge
-    in   pins, 1
-    wait 0 gpio 12             ; update MISO on falling edge
-    out  pins, 1
-    jmp  x-- bit_loop
+    wait 1 gpio 12             ; rising edge: master samples MISO
+    in   pins, 1               ; capture current MOSI bit
+    wait 0 gpio 12             ; falling edge: safe time to change MISO
+    out  pins, 1               ; present next MISO bit
+    jmp  x-- bit_loop          ; execute eight sample/update cycles
 
+    ; With right-shifting IN configuration, the completed byte occupies bits
+    ; 31..24 of the RX FIFO word consumed by TransportSPI::service().
     push block
-    jmp  pin wait_cs_low       ; configured jump pin is SPI_CS
+
+    ; If CS is now high, return to frame wait. Otherwise continue with the next
+    ; byte inside the same active-low frame.
+    jmp  pin wait_cs_low
     jmp  byte_loop
+
 .wrap

@@ -1,3 +1,16 @@
+/**
+ * @file Modular_Control_Module_PIO_SPI_LAYER_A_RX.ino
+ * @brief Historical integrated command, snapshot, RESYNC, and SPI demo.
+ *
+ * This is the most complete current application-flow reference, but it is not
+ * a production sketch:
+ *
+ * - parameters are placeholders;
+ * - EN1–EN6 and their buttons are not scanned;
+ * - the directory also contains another `.ino` with setup()/loop();
+ * - the nested SPI PIO source is stale relative to the corrected root copy;
+ * - TX/event overflow handling is incomplete.
+ */
 #include <Arduino.h>
 
 #define BUILD_MODE_CONTROL_SLAVE
@@ -10,19 +23,7 @@
 #include "CommandDispatcher.h"
 #include "SnapshotFlow.h"
 
-/*****************************************************************************************
- *  DEMO PARAMS (placeholder)
- *  ------------------------
- *  Your real firmware likely has many more params mapped to encoders.
- *  This sketch demonstrates:
- *    - Master->Slave commands over SPI MOSI (CS-framed)
- *    - Slave->Master state packets over SPI MISO
- *    - IRQ pin asserted HIGH when TX packets are pending
- *
- *  IRQ PIN:
- *    GPIO11 (Pin 14) active HIGH
- *****************************************************************************************/
-
+/** Placeholder parameter table; not the six physical controls. */
 static Param params[] = {
   { "Param0", 0, 0, 0, 127, 1, 1, false },
   { "Param1", 64, 64, 0, 127, 1, 1, false },
@@ -33,7 +34,7 @@ static const uint8_t NUM_PARAMS = sizeof(params) / sizeof(params[0]);
 static EventQueue<16> eventQueue;
 static SnapshotFlowState snapshotFlow;
 static StatePublisher publisher(eventQueue, snapshotFlow);
-static TransportSPI   spi;
+static TransportSPI spi;
 static CommandDispatcher dispatcher(params, NUM_PARAMS, eventQueue, snapshotFlow);
 
 void setup() {
@@ -44,30 +45,22 @@ void setup() {
 }
 
 void loop() {
-  // Always service the transport frequently (drains RX FIFO + feeds TX FIFO)
+  // PIO FIFO service and software CS framing must run continuously.
   spi.service();
 
-  // ----------------- RX: MOSI -> Command Dispatcher -----------------
+  // -----------------------------------------------------------------------
+  // Master command path
+  // -----------------------------------------------------------------------
   if (spi.hasRxPacket()) {
     uint8_t pkt[8];
+
     if (spi.popRxPacket(pkt)) {
-            // Layer D: RESYNC command is special because it must clear BOTH:
-      //   1) the internal event queue (drop stale events)
-      //   2) the transport TX queue (drop stale outbound packets)
-      //
-      // Then it immediately queues a fresh framed snapshot so the master can
-      // re-establish an authoritative baseline.
+      // RESYNC crosses abstraction boundaries: it clears both transport state
+      // and higher-level events before generating a new baseline.
       if (pkt[2] == MSG_CMD_RESYNC) {
-        // Drop any pending outbound data and deassert IRQ immediately.
         spi.clearTxQueue();
-
-        // Drop pending internal events (including any partial snapshot).
         eventQueue.clear();
-
-        // Reset snapshot flow state so a new snapshot can be queued cleanly.
         snapshotFlow.snapshot_in_progress = false;
-
-        // Queue a fresh framed snapshot (BEGIN, PARAM_STATE×N, END).
         dispatcher.requestSnapshot();
       } else {
         dispatcher.handlePacket(pkt);
@@ -75,15 +68,20 @@ void loop() {
     }
   }
 
-  // ----------------- Publish pipeline: Events -> Packets -> TX Queue -----------------
+  // -----------------------------------------------------------------------
+  // Event publication path
+  // -----------------------------------------------------------------------
   publisher.service();
+
   if (publisher.hasPacket()) {
     uint8_t pkt[8];
+
     if (publisher.popPacket(pkt)) {
-      // Enqueue for TX; if queue is full, packet is dropped (rare; can tune depth)
-      spi.enqueueTxPacket(pkt);
+      // Current demo ignores a false return. Production firmware must report
+      // overflow and recover with a complete fresh snapshot.
+      (void)spi.enqueueTxPacket(pkt);
     }
   }
 
-  // NOTE: IRQ pin is managed automatically inside TransportSPI based on TX queue.
+  // SLAVE_IRQ is managed by TransportSPI from software TX queue state.
 }

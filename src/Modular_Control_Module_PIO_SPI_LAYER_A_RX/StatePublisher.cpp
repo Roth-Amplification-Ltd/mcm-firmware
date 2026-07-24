@@ -1,41 +1,46 @@
 #include "StatePublisher.h"
 
-static inline void enc24(int32_t v, uint8_t& b0, uint8_t& b1, uint8_t& b2) {
+/** Encode the low 24 bits of an int32_t in little-endian byte order. */
+static inline void enc24(int32_t v,
+                         uint8_t& b0,
+                         uint8_t& b1,
+                         uint8_t& b2) {
   b0 = (uint8_t)(v & 0xFF);
   b1 = (uint8_t)((v >> 8) & 0xFF);
   b2 = (uint8_t)((v >> 16) & 0xFF);
 }
 
 void StatePublisher::service() {
+  // Back-pressure boundary: never overwrite a packet the main loop has not yet
+  // transferred into the transport queue.
   if (_ready) return;
 
-  Event ev;
-  if (!_q.pop(ev)) return;
+  Event event;
+  if (!_q.pop(event)) return;
 
   _pkt[0] = PROTO_SYNC_BYTE;
   _pkt[1] = PROTO_VERSION;
 
-  switch (ev.type) {
+  switch (event.type) {
     case EVT_PARAM_CHANGED:
       _pkt[2] = MSG_PARAM_STATE;
-      _pkt[3] = ev.index;
-      enc24(ev.value, _pkt[4], _pkt[5], _pkt[6]);
+      _pkt[3] = event.index;
+      enc24(event.value, _pkt[4], _pkt[5], _pkt[6]);
       break;
 
     case EVT_SNAPSHOT_BEGIN:
       _pkt[2] = MSG_SNAPSHOT_BEGIN;
-      _pkt[3] = ev.index; // param_count
-      enc24(ev.value, _pkt[4], _pkt[5], _pkt[6]); // reserved
+      _pkt[3] = event.index; // current code uses parameter count
+      enc24(event.value, _pkt[4], _pkt[5], _pkt[6]); // reserved/currently zero
       break;
 
     case EVT_SNAPSHOT_END:
       _pkt[2] = MSG_SNAPSHOT_END;
-      _pkt[3] = ev.index; // param_count
-      enc24(ev.value, _pkt[4], _pkt[5], _pkt[6]); // reserved
+      _pkt[3] = event.index; // current code uses parameter count
+      enc24(event.value, _pkt[4], _pkt[5], _pkt[6]); // reserved/currently zero
 
-      // Layer D: snapshot flow-control release point.
-      // We clear the flag when END is SERIALIZED so snapshots never overlap
-      // in the published stream.
+      // Release the software overlap guard once END has entered the serialized
+      // stream. This is earlier than physical on-wire completion.
       _flow.snapshot_in_progress = false;
       break;
 
@@ -49,6 +54,7 @@ void StatePublisher::service() {
 
 bool StatePublisher::popPacket(uint8_t* out8) {
   if (!_ready) return false;
+
   memcpy(out8, _pkt, 8);
   _ready = false;
   return true;

@@ -5,28 +5,31 @@
 #include "ParamBinding.h"
 #include "SnapshotFlow.h"
 
-/*****************************************************************************************
+/**
+ * @class CommandDispatcher
+ * @brief Validate host command packets and translate them into state changes.
  *
- * CommandDispatcher (Layer D)
- * ==========================
- * Consumes validated command packets from the master and produces internal events.
- *
- * New in Layer D:
- *   - snapshot flow-control (avoid overlapping snapshots)
- *   - RESYNC command is handled at a higher level (main loop) because it also
- *     clears the SPI TX queue; see .ino for exact semantics.
- *
- *****************************************************************************************/
-
+ * The dispatcher owns protocol semantics but not byte transport. It receives a
+ * complete eight-byte packet from TransportSPI, rejects invalid envelope/CRC,
+ * applies supported commands to the authoritative Param array, and emits
+ * transport-independent events.
+ */
 class CommandDispatcher {
 public:
-  CommandDispatcher(Param* params, uint8_t paramCount, EventQueue<16>& q, SnapshotFlowState& flow)
-  : _params(params), _paramCount(paramCount), _q(q), _flow(flow) {}
+  CommandDispatcher(Param* params,
+                    uint8_t paramCount,
+                    EventQueue<16>& queue,
+                    SnapshotFlowState& flow)
+  : _params(params),
+    _paramCount(paramCount),
+    _q(queue),
+    _flow(flow)
+  {}
 
+  /** Validate and execute one complete master-to-MCM command packet. */
   void handlePacket(const uint8_t pkt[8]);
 
-  // Force enqueue of a framed snapshot sequence (BEGIN, PARAM_STATE×N, END).
-  // Used by RESYNC handling in the main loop.
+  /** Request BEGIN, one PARAM_STATE per parameter, and END. */
   void requestSnapshot();
 
 private:
