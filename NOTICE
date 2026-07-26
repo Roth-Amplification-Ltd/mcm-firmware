@@ -1,0 +1,21 @@
+MCM Firmware
+============
+
+Copyright 2026 Roth Amplification Ltd
+
+This repository's firmware, reference implementations, tests, examples, and
+project documentation are licensed under the Mozilla Public License 2.0
+(MPL-2.0), unless a file or directory explicitly states another license.
+
+The MPL-2.0 is a file-level copyleft license. Modifications to MPL-covered
+files must remain available under MPL-2.0 when distributed in Source Code
+Form. Separate files in a Larger Work may be licensed under other terms,
+subject to the MPL-2.0.
+
+No trademark rights are granted. The names "Roth Amplification", "MCM",
+"Steal This Pedal", associated logos, and product branding are not licensed by
+the MPL-2.0 merely because source code is made available under that license.
+
+The firmware license does not automatically license PCB layouts, schematics,
+mechanical designs, artwork, or other hardware materials. Those materials must
+carry their own explicit hardware or content license.

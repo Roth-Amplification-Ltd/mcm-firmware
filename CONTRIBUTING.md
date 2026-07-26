@@ -62,3 +62,17 @@ index++;
 ## Testing expectations
 
 Protocol changes require byte-level test vectors. Transport changes require at least one logic-analyzer capture showing CS, SCK, MOSI, MISO, and IRQ. Encoder changes require clockwise/counter-clockwise transition tests and invalid-transition tests. Button changes require debounce and long-press timing tests.
+
+## Licensing of contributions
+
+The repository is licensed under MPL-2.0. By submitting a contribution, you
+represent that you have the right to submit it and agree that the contribution
+may be distributed under MPL-2.0. Add the project SPDX and MPL notice to every
+new source file. Preserve compatible third-party notices rather than replacing
+them. Run:
+
+```bash
+python3 tools/check_license_headers.py
+```
+
+See [`docs/LICENSING.md`](docs/LICENSING.md) for the project policy.

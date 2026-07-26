@@ -112,4 +112,11 @@ The project targets the Earle Philhower **Arduino-Pico** core for RP2040. Curren
 
 ## License
 
-See [`LICENSE`](LICENSE). Source files should retain the repository's licensing terms when copied or redistributed.
+MCM firmware is licensed under the **Mozilla Public License 2.0**
+(`MPL-2.0`). MPL-2.0 is file-level copyleft: distributed modifications to
+MPL-covered files remain open under MPL-2.0, while separate files in a larger
+commercial product may use other terms. See [`LICENSE`](LICENSE),
+[`NOTICE`](NOTICE), and [MCM Firmware Licensing](docs/LICENSING.md).
+
+The firmware license does not grant rights to Roth Amplification trademarks or
+automatically license separate PCB, schematic, mechanical, or branding assets.

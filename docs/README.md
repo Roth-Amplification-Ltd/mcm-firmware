@@ -20,6 +20,7 @@ This directory is the maintained engineering handbook for the Modular Control Mo
 | [Implementation Roadmap](IMPLEMENTATION_ROADMAP.md) | Recommended order for turning the repository into production firmware |
 | [Maintainer Checklist](MAINTAINER_CHECKLIST.md) | Required updates when changing pins, messages, or state behavior |
 | [Glossary](GLOSSARY.md) | Project terminology |
+| [Licensing](LICENSING.md) | MPL-2.0 scope, distribution obligations, contributions, and hardware separation |
 
 ## Protocol proposal package
 

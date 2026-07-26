@@ -7,3 +7,4 @@
 | [0003](ADR-0003-level-based-data-ready-irq.md) | Data-ready IRQ is level-based |
 | [0004](ADR-0004-authoritative-state-model.md) | MCM owns authoritative control state |
 | [0005](ADR-0005-framed-snapshots-and-resync.md) | Baselines use framed snapshots and RESYNC |
+| [0006](ADR-0006-mpl-2.0-firmware-license.md) | Firmware is licensed under MPL-2.0 |
