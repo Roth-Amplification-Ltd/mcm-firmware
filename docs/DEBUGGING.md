@@ -1,82 +1,56 @@
 # Debugging and Logic Analyzer Guide
 
-## Minimum capture channels
+## Minimum capture
 
 Capture:
 
-1. `SPI_CS`
-2. `SPI_SCK`
-3. `SPI_MOSI`
-4. `SPI_MISO`
-5. `SLAVE_IRQ`
-
-Use a sample rate comfortably above the SPI clock. Decode as Mode 0, MSB-first, eight bits per word.
-
-## Expected transaction shape
-
 ```text
-CS:   high ____| low for 64 clocks |____ high
-SCK:       ____/\/\/\/...64 edges...\/_
-MOSI:      eight command/dummy bytes
-MISO:      eight response/previous bytes
-IRQ:  high while response packet(s) remain pending
+GPIO11 IRQ
+GPIO12 SCK
+GPIO13 CS
+GPIO14 MISO
+GPIO15 MOSI
 ```
 
-## First checks
+Decode as SPI Mode 0, MSB first, eight bytes per CS frame.
 
-- CS returns high between every eight-byte packet.
-- SCK is low when CS asserts.
-- exactly 64 clocks occur per frame.
-- first MISO bit is stable before the first rising edge.
-- byte 0 of a response is `0xA5`.
-- CRC recomputes correctly.
-- IRQ does not pulse too briefly for the host.
+## Expected snapshot
 
-## Common failures
+After GET_SNAPSHOT or RESYNC, expect nine validated response frames in this
+order:
 
-### All `0xFF` or all `0x00` on MISO
+```text
+10, 01, 01, 01, 01, 01, 01, 02, 11
+```
 
-Check MISO pin direction, PIO state-machine enable, PIO program/header match, common ground, and whether TX FIFO data was loaded before the first clock.
+The six `0x01` packets must have indexes 0 through 5. BEGIN and END must carry
+the same sequence byte in DATA0.
 
-### One-bit shift
+## Fault isolation
 
-Check first-bit preload and Mode-0 edge assumptions. The master samples on rising edge; MISO must change on falling edge and be preloaded before the first rising edge.
+| Symptom | Check |
+|---|---|
+| IRQ never rises | publisher request, TX enqueue, GPIO11 direction |
+| IRQ never falls | frame-end marker, CS rising at byte boundary, TX retirement |
+| repeated MISO byte | TX FIFO starvation at excessive SPI clock |
+| missing command | frame length, marker delivery, RX overwrite counter |
+| reversed encoder direction | A/B map and physical footprint orientation |
+| encoder never moves | adjacent pin assertion, PIO allocation, generated header |
+| button chatters | raw wiring, pull-up, debounce timing |
+| snapshot sequence breaks | queue recovery, master transaction count, CRC rejection |
 
-### Correct bytes but rejected command
+## Diagnostics currently available in memory
 
-Recompute CRC over exactly bytes 0–6. Verify version `0x01`, sync `0xA5`, and that byte order was not reversed by a word-oriented SPI API.
+- bad sync/version/CRC;
+- short/long SPI frame;
+- RX overwrite;
+- publication queue overflow;
+- TX queue overflow;
+- TX underrun/unstaged packet at frame completion;
+- unsupported command;
+- invalid control index;
+- encoder initialization failure;
+- RESYNC count.
 
-### Partial packet accepted or full packet discarded
-
-Check CS framing and main-loop service frequency. Current C++ code recognizes CS edges by polling `digitalRead()`.
-
-### IRQ low while final packet still clocks
-
-This matches a known current limitation: software queue retirement occurs when bytes are loaded into PIO FIFO, not when physically shifted.
-
-### Encoder direction reversed
-
-Swap caller A/B mapping for that encoder rather than changing the global transition table. EN2 and EN6 GPIO order is reversed numerically, which `canonicalize()` is designed to handle.
-
-### Button flicker
-
-Inspect raw input, pull-up, ground reference, debounce interval, and update frequency. Confirm `update()` is called continuously.
-
-## Serial logging policy
-
-Useful counters:
-
-- valid RX packets;
-- bad sync;
-- bad version;
-- bad CRC;
-- partial CS frames;
-- RX overlength frames;
-- event-queue overflow;
-- TX-queue overflow;
-- RESYNC count;
-- snapshot count;
-- encoder invalid transitions;
-- control-scan deadline misses.
-
-Avoid printing from time-critical PIO service paths at high rates. Aggregate counters and print periodically.
+A later protocol extension should expose these counters through `GET_INFO` or a
+separate diagnostics response.

@@ -1,64 +1,50 @@
 # Repository Layout
 
-## Root
+## Canonical firmware
 
-| Path | Description |
-|---|---|
-| `README.md` | Project overview and documentation entry point |
-| `CONTRIBUTING.md` | Change discipline for hardware, protocol, and firmware work |
-| `Doxyfile` | Optional Doxygen configuration for source API documentation |
-| `LICENSE` | Repository license |
-| `docs/` | Engineering handbook, diagrams, decisions, protocol proposal, tests, and tools |
-
-## Newer hardware-aligned source slice
-
-| Path | Description |
-|---|---|
-| `src/HardwareConfig.h` | KiCad-verified SPI host GPIO constants |
-| `src/SpiSlaveM0.pio` | Corrected SPI Mode 0 PIO program using absolute GPIO waits and configured `jmp pin` |
-| `src/TransportSPI.h/.cpp` | Newer SPI transport implementation using `HardwareConfig.h` |
-| `src/Modular_Control_Module_PIO_SPI.ino` | Newer integration sketch; currently incomplete because its support headers were moved elsewhere |
-
-## Historical integrated Layer-A/Layer-D source tree
-
-Directory: `src/Modular_Control_Module_PIO_SPI_LAYER_A_RX/`
+Directory: `src/MCM_Firmware/`
 
 | File | Responsibility |
 |---|---|
-| `Modular_Control_Module_PIO_SPI_LAYER_A_RX.ino` | SPI command/response loop, RESYNC handling, placeholder parameter model |
-| `Modular_Control_Module.ino` | Older minimal publisher demonstration; conflicts with the other `.ino` when compiled in the same Arduino sketch folder |
-| `TransportProtocol.h` | Packet constants, message IDs, CRC-8 |
-| `CommandDispatcher.h/.cpp` | Validates commands, mutates parameter state, enqueues snapshot/reset events |
-| `EventQueue.h` | Fixed-capacity single-threaded ring buffer |
-| `StatePublisher.h/.cpp` | Converts internal events into eight-byte packets |
-| `SnapshotFlow.h` | Shared guard preventing overlapping snapshots |
-| `ParamBinding.h` | Minimal authoritative parameter record |
-| `TransportSPI.h/.cpp` | Older SPI transport copy with RESYNC queue clearing |
-| `SpiSlaveM0.pio` | Older SPI PIO program; not the corrected root version |
-| `EncoderPIO.h/.cpp` | Quadrature state decoder driven by an encoder PIO state stream |
-| `EncoderPIO.pio` | Pushes a sample when either encoder phase changes |
-| `DebouncedButton.h` | Active-low button debounce and long-press edge detection |
+| `MCM_Firmware.ino` | Minimal Arduino entry point; delegates to `McmApplication` |
+| `McmApplication.h/.cpp` | Cooperative system superloop and explicit application state machine |
+| `McmTypes.h` | Fixed-width project types and common compile-time assumptions |
+| `HardwareConfig.h` | Electrical constants, queue sizes, timing constants, and SPI resources |
+| `ControlMap.h` | EN1–EN6 GPIO and PIO state-machine assignments |
+| `ControlState.h` | Immutable snapshot and change-set records |
+| `ControlScanner.h/.cpp` | Six encoder and six button sampling; authoritative state owner |
+| `EncoderPIO.h/.cpp` | Bounded quadrature decoder service and saturating count |
+| `EncoderPIO.pio` | Encoder phase-change stream state machine |
+| `DebouncedButton.h/.cpp` | Explicit active-low debounce/long-hold state machine |
+| `CommandDispatcher.h/.cpp` | Validates packets and converts commands into typed actions |
+| `SnapshotPublisher.h/.cpp` | Snapshot serialization FSM and incremental publication queue |
+| `EventQueue.h` | Fixed-capacity allocation-free ring buffer |
+| `TransportProtocol.h` | Eight-byte wire format, CRC, typed packet constructors and parser |
+| `TransportSPI.h/.cpp` | PIO-backed SPI peripheral, framed RX, bounded TX queue, level IRQ |
+| `SpiSlaveM0.pio` | SPI Mode 0 bit engine and frame-end marker generation |
+| `Diagnostics.h` | Saturating fault and recovery counters |
 
-## Recommended future layout
+## Archived source
 
-The production tree should eventually resemble:
+Directory: `archive/pre-misra-canonicalization/`
 
-```text
-src/
-  McmFirmware.ino
-  HardwareConfig.h
-  ControlMap.h
-  EncoderScanner.h/.cpp
-  ButtonScanner.h/.cpp
-  EventQueue.h
-  ParamBinding.h
-  CommandDispatcher.h/.cpp
-  StatePublisher.h/.cpp
-  SnapshotFlow.h
-  TransportProtocol.h
-  TransportSPI.h/.cpp
-  SpiSlaveM0.pio
-  EncoderPIO.pio
-```
+This directory preserves the previous corrected root transport slice and the
+historical Layer-A/Layer-D development sketch. It is retained for archaeology,
+comparison, and attribution. It is not compiled as part of the canonical
+firmware and is excluded from the native-code MISRA-like scope.
 
-Only one `.ino` file should exist in the sketch folder, and every local include should resolve from that same folder or a conventional library directory.
+## Verification support
+
+| Path | Purpose |
+|---|---|
+| `tests/host/` | Native host tests for packet, queue, command, and snapshot logic |
+| `tools/check_misra_like.py` | Lightweight enforceable project-profile checker |
+| `tools/check_license_headers.py` | MPL/SPDX source-header check |
+| `.github/workflows/misra-like-quality.yml` | CI execution of profile and host tests |
+| `docs/MISRA_*.md` | Profile, matrix, and deviation evidence |
+
+## Build rule
+
+Only one `.ino` file exists in the canonical sketch directory. Every local
+include required by that sketch is present in the same directory, allowing the
+Arduino build system to treat it as one complete sketch.

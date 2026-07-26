@@ -1,0 +1,41 @@
+; SPDX-FileCopyrightText: 2026 Roth Amplification Ltd
+; SPDX-License-Identifier: MPL-2.0
+;
+; This Source Code Form is subject to the terms of the Mozilla Public
+; License, v. 2.0. If a copy of the MPL was not distributed with this
+; file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+
+.program spi_slave_m0_msb_rx
+
+; SPI peripheral, Mode 0, MSB first.
+; GPIO12 SCK, GPIO13 CS, GPIO14 MISO, GPIO15 MOSI.
+;
+; One received byte is pushed as bits 31..24. When CS is observed HIGH at a
+; byte boundary, a second RX word of 0xFFFFFFFF is pushed as a frame-end marker.
+; This lets C++ assemble frames without polling CS quickly enough to see every
+; edge. The master contract remains exactly eight bytes per CS assertion.
+
+.wrap_target
+wait_cs_low:
+    wait 0 gpio 13
+    wait 0 gpio 12
+byte_loop:
+    pull noblock
+    out  pins, 1
+    mov  isr, null
+    set  x, 7
+bit_loop:
+    wait 1 gpio 12
+    in   pins, 1
+    wait 0 gpio 12
+    out  pins, 1
+    jmp  x-- bit_loop
+    push block
+    jmp  pin frame_end
+    jmp  byte_loop
+frame_end:
+    mov  isr, ~null
+    push block
+    jmp  wait_cs_low
+.wrap

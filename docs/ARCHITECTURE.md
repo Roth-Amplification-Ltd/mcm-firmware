@@ -1,104 +1,76 @@
-# Firmware Architecture
+# MCM Firmware Architecture
 
-## Design objective
+## Architectural style
 
-The MCM owns physical control state and exposes deterministic, versioned state to a master MCU. The master should not need to decode switch bounce or raw quadrature transitions.
-
-## Layer model
-
-### 1. Hardware definition
-
-`HardwareConfig.h` and the future `ControlMap.h` are the only intended sources of GPIO truth. PIO programs and integration code must agree with these values.
-
-### 2. Physical control scanning
-
-- `EncoderPIO` converts electrical quadrature states into a monotonic transition count.
-- `DebouncedButton` converts an active-low switch into stable pressed/released state plus one-shot edges.
-
-These modules currently exist but are not instantiated by the active integration sketch.
-
-### 3. Authoritative parameter model
-
-`Param` stores the current value, default, range, step metadata, and wrap policy. The current implementation only uses reset-to-default behavior; range, step, and wrap metadata are placeholders for the later control-binding layer.
-
-### 4. Internal event queue
-
-`EventQueue<N>` decouples state changes from packet serialization. Producers append compact `Event` records. `StatePublisher` consumes them one at a time.
-
-The queue is single-threaded. It has no interrupt locking, atomics, or multicore synchronization. All accesses must occur from one execution context unless explicit synchronization is added.
-
-### 5. Command dispatcher
-
-`CommandDispatcher` validates sync, version, and CRC before applying a command. Reset commands mutate the parameter array and enqueue the resulting authoritative state. Snapshot commands enqueue begin/state/end events.
-
-### 6. State publisher
-
-`StatePublisher` converts one internal event into one fixed packet and computes its CRC. It contains one staging packet. The main loop must move that packet into `TransportSPI` before another event can be serialized.
-
-### 7. SPI transport
-
-`TransportSPI` owns:
-
-- RP2040 PIO configuration;
-- CS-framed receive assembly;
-- one completed RX packet slot;
-- an eight-packet software TX ring;
-- the active-high IRQ output;
-- transfer of bytes between software and PIO FIFOs.
-
-It deliberately does not interpret packet types or CRCs.
-
-## End-to-end command path
+The canonical firmware is a cooperative event-driven embedded application with
+explicit subordinate finite-state machines. It uses no RTOS and no
+project-owned dynamic allocation.
 
 ```mermaid
-sequenceDiagram
-    participant Host as Master MCU
-    participant PIO as RP2040 PIO SPI
-    participant T as TransportSPI
-    participant D as CommandDispatcher
-    participant Q as EventQueue
-    participant P as StatePublisher
-
-    Host->>PIO: CS low + 8-byte command on MOSI
-    PIO->>T: RX FIFO bytes
-    Host->>PIO: CS high
-    T->>T: accept only exactly 8 received bytes
-    T->>D: completed packet
-    D->>D: validate sync/version/CRC
-    D->>Q: enqueue state/snapshot events
-    P->>Q: pop one event
-    P->>P: serialize packet + CRC
-    P->>T: enqueue response packet
-    T-->>Host: SLAVE_IRQ high
-    Host->>PIO: clock one 8-byte read frame
-    PIO-->>Host: packet on MISO
+flowchart LR
+    A[Arduino setup/loop] --> APP[McmApplication]
+    APP --> SCAN[ControlScanner]
+    SCAN --> ENC[6 EncoderPIO instances]
+    SCAN --> BTN[6 DebouncedButton FSMs]
+    APP --> CMD[CommandDispatcher]
+    APP --> PUB[SnapshotPublisher FSM]
+    APP --> SPI[TransportSPI]
+    PUB --> SPI
+    SPI --> PIO[RP2040 PIO SPI state machine]
+    APP --> DIAG[Diagnostics]
 ```
 
-## State ownership
+## Ownership
 
-The parameter array is authoritative. Packet transmission is a report of state, not the state itself. Clearing a transport queue must never roll back a parameter value.
+| State | Sole owner |
+|---|---|
+| Encoder transition counts | `EncoderPIO` instances |
+| Authoritative encoder/button state | `ControlScanner` |
+| Frozen snapshot being serialized | `SnapshotPublisher` |
+| Pending incremental publications | `SnapshotPublisher` queue |
+| SPI TX packets and RX assembly | `TransportSPI` |
+| Recovery mode and snapshot sequence | `McmApplication` |
+| Error counters | `Diagnostics` |
 
-## Snapshot invariant
+No queue or mutable application object is designed for concurrent ISR/core-1
+access.
 
-A snapshot is ordered:
+## Main loop order
+
+`McmApplication::service()` performs the same ordered stages each iteration:
+
+1. service SPI RX/TX FIFOs;
+2. consume at most one complete host command;
+3. scan all six encoders and buttons;
+4. queue changed absolute states;
+5. advance publication by at most one packet;
+6. offer at most one packet to the SPI TX queue;
+7. transition from recovery to running when all recovery data is consumed.
+
+## Recovery invariant
+
+A queue-integrity failure or host `RESYNC` command causes:
 
 ```text
-BEGIN -> state records -> END
+clear SPI TX state
+clear publisher events and partial snapshot
+increment resync counter
+capture one new immutable control snapshot
+serialize BEGIN + six encoders + buttons + END
+remain Resynchronizing until publisher and transport are idle
 ```
 
-No second snapshot may begin before the first snapshot's END has entered the ordered outbound stream. For the stronger coherent snapshot design, all encoder and button state must first be copied into an immutable temporary buffer.
+Stale events are never intentionally mixed into the new baseline.
 
-## Main-loop service requirements
+## Memory model
 
-The main loop must call `TransportSPI::service()` frequently enough to drain RX FIFO data and supply TX FIFO data. It must also move publisher packets into the transport queue without blocking.
+All persistent objects are statically allocated. Arrays and queues have
+compile-time capacities. The project code uses no ownership pointers, dynamic
+containers, or runtime object graphs.
 
-No existing layer performs scheduling, deadlines, or watchdog handling. Those belong in the production integration layer.
+## Hardware/software split
 
-## Error strategy
-
-- Bad sync/version/CRC: discard packet and make no state change.
-- Partial CS frame: discard.
-- RX overrun beyond eight bytes: ignore extra bytes until CS rises.
-- Event queue full: current code silently loses the event; production code must count/report this.
-- TX queue full: current caller may silently lose the newest packet; production code must count/report this.
-- Lost synchronization: master issues `RESYNC`, then accepts only a fresh framed snapshot.
+PIO owns SPI edge timing and encoder phase-change capture. C++ owns packet
+framing, state validation, control semantics, queues, recovery, and diagnostics.
+The PIO sources and generated headers are treated as separately reviewed
+adopted/generated code for compliance purposes.

@@ -1,0 +1,28 @@
+# SPDX-FileCopyrightText: 2026 Roth Amplification Ltd
+# SPDX-License-Identifier: MPL-2.0
+#
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+name: Deterministic firmware quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  native-profile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify MPL source headers
+        run: python3 tools/check_license_headers.py
+      - name: Verify MCM MISRA-like profile
+        run: python3 tools/check_misra_like.py
+      - name: Run host protocol tests
+        run: bash tests/host/run.sh

@@ -1,157 +1,111 @@
 # MCM SPI Wire Protocol
 
-## Status vocabulary
+## Electrical transaction
 
-- **Implemented:** present in the nested protocol source on `main`.
-- **Design target:** specified by the coherent snapshot package but not fully implemented.
+- Logic level: 3.3 V
+- SPI mode: 0
+- Bit order: MSB first
+- `CS`: active low
+- Frame size: exactly 8 bytes
+- `SLAVE_IRQ`: active-high level indicating unconsumed response data
 
-## Electrical and transfer format
+The master should clock one eight-byte transaction per asserted `CS` frame.
+MOSI always carries a command or a valid NOP packet; MISO simultaneously carries
+the next queued response packet.
 
-| Property | Value |
-|---|---|
-| Logic | 3.3 V |
-| Mode | SPI Mode 0 (`CPOL=0`, `CPHA=0`) |
-| Bit order | MSB-first on the wire |
-| Chip select | Active low |
-| Frame size | Exactly 8 bytes / 64 clock edges per CS assertion |
-| IRQ | Active-high level indicating pending response data |
+## Packet envelope
 
-The master must not assume that the response to a command appears during the same full-duplex frame. The MCM validates and processes a command after the CS-framed receive packet is complete, then queues later response packets.
-
-## Common eight-byte envelope
-
-| Byte | Name | Description |
+| Byte | Name | Definition |
 |---:|---|---|
-| 0 | `SYNC` | Always `0xA5` |
-| 1 | `VERSION` | Currently `0x01` |
-| 2 | `TYPE` | Message ID |
-| 3 | `INDEX` | Parameter index, control count, or type-specific selector |
-| 4 | `DATA0` | Payload byte 0 / least-significant byte |
-| 5 | `DATA1` | Payload byte 1 |
-| 6 | `DATA2` | Payload byte 2 / most-significant byte |
-| 7 | `CRC8` | CRC-8 of bytes 0 through 6 |
+| 0 | `SYNC` | `0xA5` |
+| 1 | `VERSION` | `0x01` |
+| 2 | `TYPE` | message/command identifier |
+| 3 | `INDEX` | zero-based control index or type-specific count |
+| 4 | `DATA0` | least-significant payload byte |
+| 5 | `DATA1` | payload byte |
+| 6 | `DATA2` | most-significant payload byte |
+| 7 | `CRC8` | CRC over bytes 0–6 |
 
-Never transmit an in-memory C/C++ struct directly. Build the eight explicit bytes so compiler padding and host endianness cannot alter the protocol.
-
-## CRC-8
-
-| Property | Value |
-|---|---|
-| Polynomial | `0x07` (`x^8 + x^2 + x + 1`) |
-| Initial value | `0x00` |
-| Reflect input | No |
-| Reflect output | No |
-| Final XOR | `0x00` |
-| Covered bytes | 0–6 |
-
-Reference implementation:
-
-```cpp
-uint8_t crc8(const uint8_t* data, uint8_t length) {
-    uint8_t crc = 0;
-    for (uint8_t i = 0; i < length; ++i) {
-        crc ^= data[i];
-        for (uint8_t bit = 0; bit < 8; ++bit) {
-            crc = (crc & 0x80u)
-                ? static_cast<uint8_t>((crc << 1) ^ 0x07u)
-                : static_cast<uint8_t>(crc << 1);
-        }
-    }
-    return crc;
-}
-```
-
-## Implemented message IDs
-
-### MCM to master
-
-| Name | ID | Payload |
-|---|---:|---|
-| `MSG_PARAM_STATE` | `0x01` | `INDEX` = parameter; bytes 4–6 = 24-bit value |
-| `MSG_SNAPSHOT_BEGIN` | `0x10` | `INDEX` = parameter count; bytes 4–6 reserved in current code |
-| `MSG_SNAPSHOT_END` | `0x11` | `INDEX` = parameter count; bytes 4–6 reserved in current code |
-
-### Master to MCM
-
-| Name | ID | Behavior |
-|---|---:|---|
-| `MSG_CMD_NOP` | `0x80` | Validate, then do nothing |
-| `MSG_CMD_GET_SNAPSHOT` | `0x81` | Enqueue BEGIN, one state packet per parameter, END |
-| `MSG_CMD_RESET_PARAM` | `0x82` | Reset `INDEX`, then publish its state |
-| `MSG_CMD_RESET_ALL` | `0x83` | Reset and publish all parameters |
-| `MSG_CMD_SET_LED` | `0x84` | Reserved/stub |
-| `MSG_CMD_GET_INFO` | `0x85` | Reserved/stub |
-| `MSG_CMD_RESYNC` | `0x86` | Clear pending software events and TX queue, then request a fresh snapshot |
-
-## 24-bit value encoding
-
-Bytes 4–6 are little-endian:
+CRC parameters:
 
 ```text
-raw24 = DATA0 | DATA1 << 8 | DATA2 << 16
+polynomial: 0x07
+initial value: 0x00
+reflection: none
+final XOR: 0x00
 ```
 
-For signed interpretation, sign-extend bit 23:
+## Message IDs
 
-```cpp
-int32_t decodeSigned24(const uint8_t* packet) {
-    int32_t value = static_cast<int32_t>(packet[4])
-                  | (static_cast<int32_t>(packet[5]) << 8)
-                  | (static_cast<int32_t>(packet[6]) << 16);
-    if (value & 0x00800000L) value |= 0xFF000000L;
-    return value;
-}
-```
+| ID | Direction | Name | Meaning |
+|---:|---|---|---|
+| `0x01` | MCM → master | `ENCODER_STATE` | Signed 24-bit absolute encoder count |
+| `0x02` | MCM → master | `BUTTON_STATE` | Pressed and long-held bitmaps |
+| `0x10` | MCM → master | `SNAPSHOT_BEGIN` | Start of coherent baseline |
+| `0x11` | MCM → master | `SNAPSHOT_END` | End of coherent baseline |
+| `0x80` | master → MCM | `NOP` | No state change |
+| `0x81` | master → MCM | `GET_SNAPSHOT` | Request coherent baseline |
+| `0x82` | master → MCM | `RESET_CONTROL` | Reset indexed encoder count to zero |
+| `0x83` | master → MCM | `RESET_ALL` | Reset all counts and publish snapshot |
+| `0x84` | master → MCM | `SET_LED` | Reserved/unsupported |
+| `0x85` | master → MCM | `GET_INFO` | Reserved/unsupported |
+| `0x86` | master → MCM | `RESYNC` | Discard stale output and publish fresh baseline |
 
-The active firmware profile must define whether the value is an absolute bounded parameter, an accumulated detent count, or another quantity.
-
-## Implemented snapshot sequence
-
-For `N` parameters:
+## Encoder state
 
 ```text
-SNAPSHOT_BEGIN, INDEX=N
-PARAM_STATE, INDEX=0
-...
-PARAM_STATE, INDEX=N-1
-SNAPSHOT_END, INDEX=N
+TYPE  = 0x01
+INDEX = 0..5
+DATA0..2 = signed little-endian 24-bit count
 ```
 
-The current implementation serializes current parameter values as events are enqueued. It does not yet include button state.
+Valid range is `-8,388,608` through `8,388,607`. Values are clamped before
+serialization.
 
-## RESYNC
+## Button state
 
-`MSG_CMD_RESYNC` is intended as the recovery mechanism after reset, CRC failure, lost packet, partial snapshot, or host reconnect.
+```text
+TYPE  = 0x02
+INDEX = 6
+DATA0 = current pressed bitmap
+DATA1 = current long-held bitmap
+DATA2 = valid button count (6)
+```
 
-Current nested implementation:
+Bit 0 maps to EN1 and bit 5 maps to EN6. Bits 6 and 7 are zero.
 
-1. clears the software TX queue;
-2. clears the internal event queue;
-3. clears the snapshot-in-progress flag;
-4. queues a new framed parameter snapshot.
+## Snapshot boundaries
 
-Important caveat: bytes already loaded into the PIO TX FIFO are not removed by `clearTxQueue()`. A robust master should discard input until it sees a valid fresh `SNAPSHOT_BEGIN` after sending RESYNC.
+```text
+TYPE  = 0x10 or 0x11
+INDEX = 6
+DATA0 = snapshot sequence byte
+DATA1 = 0
+DATA2 = 0
+```
 
-## IRQ semantics
+The sequence wraps modulo 256. It is for matching BEGIN and END, not for
+security.
 
-Design intent: IRQ remains asserted while at least one complete packet remains to be physically transferred.
-
-Current code: IRQ is tied to the software TX queue count and can deassert after the final packet is copied into the PIO FIFO, before the master has clocked all bits. This is a known correctness gap documented in [Known Limitations](KNOWN_LIMITATIONS.md).
-
-## Coherent six-encoder/six-button design target
-
-The full proposed response is:
+## Snapshot order
 
 ```text
 SNAPSHOT_BEGIN
-PARAM_STATE EN1
-PARAM_STATE EN2
-PARAM_STATE EN3
-PARAM_STATE EN4
-PARAM_STATE EN5
-PARAM_STATE EN6
+ENCODER_STATE index 0
+ENCODER_STATE index 1
+ENCODER_STATE index 2
+ENCODER_STATE index 3
+ENCODER_STATE index 4
+ENCODER_STATE index 5
 BUTTON_STATE
 SNAPSHOT_END
 ```
 
-The normative proposal, test vectors, decoder, and reference master are in [`protocol/snapshot-v1.1/`](protocol/snapshot-v1.1/). Do not claim this behavior is implemented until the firmware captures an immutable control sample and emits the button packet.
+The MCM captures all values before emitting BEGIN. Changes occurring during
+serialization are emitted afterward as incremental absolute states.
+
+## Invalid input
+
+Bad sync, unsupported version, or bad CRC packets increment diagnostics and
+have no state-changing effect. Unknown or reserved commands are counted and
+ignored. A frame containing other than eight bytes is rejected by the transport.

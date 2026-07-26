@@ -1,67 +1,65 @@
 # Current Repository Status
 
-**Audited branch:** `main`  
-**Audited commit:** `0734fb17a53a8457c1db6c18560c552f6e7ac451` (`Align firmware with SPI-only MCM hardware`)
-
 ## Executive summary
 
-The repository contains a corrected hardware-aligned SPI transport at the top of `src/` and a more complete historical command/state implementation inside `src/Modular_Control_Module_PIO_SPI_LAYER_A_RX/`. The two trees are not presently consolidated into one clean Arduino sketch.
+The repository now contains one canonical Arduino-Pico sketch at
+`src/MCM_Firmware/MCM_Firmware.ino`. The previous split root transport and
+historical Layer-A/Layer-D sketch trees are preserved under
+`archive/pre-misra-canonicalization/` and excluded from the native-code quality
+scope.
 
-The architectural ideas are useful and largely consistent:
+The canonical implementation provides:
 
-- SPI Mode 0, MSB-first;
-- fixed eight-byte packets;
-- CRC-8 validation;
-- CS-framed commands;
-- level-based data-ready IRQ;
-- event-to-packet state publishing;
-- framed snapshots and a RESYNC command.
+- six live PIO-backed rotary encoders;
+- six explicit finite-state-machine button debouncers;
+- immutable control snapshots;
+- fixed eight-byte SPI packets with CRC-8;
+- a nine-packet encoder/button snapshot;
+- checked bounded queues;
+- explicit application, snapshot, and receive-frame states;
+- deterministic RESYNC recovery;
+- diagnostic counters, including detected TX underrun;
+- no project-owned dynamic allocation;
+- host-buildable protocol and snapshot tests;
+- automated MPL and MISRA-like profile checks.
 
-The physical encoder and button scanning is not connected to the live parameter table, and the source layout currently prevents a straightforward clean build.
+## Classification
 
-## Build-status matrix
+| Area | Classification |
+|---|---|
+| Canonical sketch layout | Implemented |
+| Six encoder scanning | Implemented |
+| Six button scanning | Implemented |
+| Atomic snapshot capture | Implemented |
+| Button-state packet | Implemented |
+| Explicit application FSM | Implemented |
+| Queue failure recovery | Implemented |
+| Native-code MISRA-like profile | Implemented |
+| Formal MISRA C++:2023 compliance claim | Not claimed |
+| Worst-case execution-time proof | Not complete |
+| Maximum supported SPI clock proof | Not complete |
+| Qualified static-analysis report | Not complete |
+| Hardware-in-loop conformance report | Not complete |
 
-| Candidate | Useful content | Blocking problem | Classification |
-|---|---|---|---|
-| `src/Modular_Control_Module_PIO_SPI.ino` | Corrected SPI transport wiring and centralized hardware map | Includes `EventQueue.h`, `TransportProtocol.h`, `StatePublisher.h`, `ParamBinding.h`, and `CommandDispatcher.h`, but those files are no longer present beside the sketch | Incomplete integration sketch |
-| `src/Modular_Control_Module_PIO_SPI_LAYER_A_RX/Modular_Control_Module_PIO_SPI_LAYER_A_RX.ino` | Command dispatcher, snapshot flow, RESYNC path, TX queue | Same directory also contains `Modular_Control_Module.ino`, giving Arduino two `setup()` and two `loop()` definitions; nested PIO code is stale relative to the corrected root PIO code | Historical integration reference |
-| Root `TransportSPI.*` + `SpiSlaveM0.pio` | Best current SPI hardware mapping; corrected absolute GPIO waits and configured `jmp pin` | No complete application layer beside it | Canonical transport slice |
-| Nested protocol/dispatcher/publisher files | Most complete current protocol logic | Hard-coded pins, stale transport copy, placeholder parameters, no live six-control scanning | Canonical logic reference pending consolidation |
+## Important remaining limitations
 
-## Implemented today
+1. The SPI PIO transport still depends on the CPU servicing split RX/TX FIFOs
+   quickly enough for the selected SPI clock. A measured maximum clock and
+   logic-analyzer evidence are still required.
+2. PIO assembly and generated PIO headers are outside the native C++ rule scope
+   and require separate review and test evidence.
+3. Arduino-Pico and the Pico SDK are adopted code. Their behavior is isolated
+   behind project modules but is not claimed as MISRA-conforming source.
+4. Diagnostic counters are internal and are not yet exposed through a
+   `GET_INFO` or diagnostics protocol response.
+5. Stack usage, loop worst-case timing, and brownout/watchdog recovery remain to
+   be measured on target hardware.
 
-- External SPI-only hardware mapping: GPIO11 through GPIO15.
-- SPI Mode 0, MSB-first PIO transport.
-- Eight-byte software packet envelope.
-- Level-based IRQ driven from TX queue state.
-- CRC-8 helper using polynomial `0x07`.
-- Message IDs for parameter state, snapshot begin/end, reset commands, and RESYNC.
-- Internal event ring buffer.
-- Parameter reset behavior.
-- Snapshot overlap guard.
-- Standalone encoder PIO decoder class.
-- Standalone debounced-button class.
+## Terminology
 
-## Not connected or not complete
-
-- Six physical encoders are not instantiated in the active sketch.
-- Six push-buttons are not instantiated in the active sketch.
-- The parameter table contains placeholders rather than EN1–EN6.
-- Encoder/button changes do not currently generate events in the active sketch.
-- No `BUTTON_STATE` packet is implemented in the code on `main`.
-- Snapshot generation reads the current parameter array while enqueueing; it does not capture an immutable six-control sample first.
-- The software TX queue depth is eight packets, while the proposed full encoder/button snapshot contains nine packets.
-- IRQ is deasserted when the software queue is emptied into PIO, not necessarily when the final bit is physically clocked by the master.
-- `clearTxQueue()` does not clear already-loaded PIO FIFO bytes.
-- No host-buildable unit-test system is wired into CI.
-- No single canonical Arduino sketch directory exists.
-
-## Documentation policy
-
-Documents use three labels:
-
-- **Implemented:** behavior visible in code on `main`.
-- **Design target:** behavior already agreed or specified but not completely implemented.
-- **Recommendation:** proposed engineering work that has not yet been accepted as protocol behavior.
-
-This distinction prevents a master-firmware developer from implementing against features that the current MCM binary cannot yet provide.
+- **Implemented:** behavior visible in the canonical source tree.
+- **MISRA-like:** project rules inspired by MISRA objectives but not a formal
+  compliance statement.
+- **Adopted code:** third-party or generated code used by the product but not
+  maintained under the complete native-code rule set.
+- **Qualification target:** evidence still required before production claims.

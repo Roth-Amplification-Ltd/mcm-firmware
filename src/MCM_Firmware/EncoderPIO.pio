@@ -1,0 +1,30 @@
+; SPDX-FileCopyrightText: 2026 Roth Amplification Ltd
+; SPDX-License-Identifier: MPL-2.0
+;
+; This Source Code Form is subject to the terms of the Mozilla Public
+; License, v. 2.0. If a copy of the MPL was not distributed with this
+; file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+
+.program encoder_state_stream
+
+; Push one two-bit A/B state whenever either phase changes. The C++ decoder owns
+; direction validation and count saturation. PUSH BLOCK provides hardware
+; backpressure if the CPU temporarily falls behind.
+
+.wrap_target
+    mov isr, null
+    in  pins, 2
+    mov x, isr
+sample:
+    mov isr, null
+    in  pins, 2
+    mov y, isr
+    jmp x!=y changed
+    jmp sample
+changed:
+    mov x, y
+    mov isr, y
+    push block
+    jmp sample
+.wrap

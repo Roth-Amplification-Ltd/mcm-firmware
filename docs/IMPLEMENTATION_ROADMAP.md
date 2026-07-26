@@ -1,62 +1,46 @@
-# Implementation Roadmap
+# Production Qualification Roadmap
 
-## Phase 1 — Consolidate the source tree
+## Completed by the deterministic hardening pass
 
-- Choose one canonical sketch directory.
-- Keep exactly one `.ino` file.
-- Move the corrected root SPI transport and PIO source into that sketch.
-- Move protocol, queue, dispatcher, publisher, and snapshot-flow modules beside it.
-- Delete or archive duplicate historical source copies.
-- Add a successful reproducible `arduino-cli` compile command.
+- one canonical sketch;
+- six encoders and six buttons integrated;
+- explicit finite-state machines;
+- immutable snapshots;
+- checked bounded queues;
+- deterministic RESYNC;
+- host protocol tests;
+- automated native profile check;
+- adopted-code/deviation documentation.
 
-## Phase 2 — Centralize hardware definition
+## Next: target build and board bring-up
 
-- Extend `HardwareConfig.h` or add `ControlMap.h` with EN1–EN6 A/B/button pins.
-- Add compile-time assertions for six controls and eight-byte packets.
-- Define PIO block/state-machine allocation in one table.
-- Share one encoder PIO program offset per PIO block.
+1. Compile the canonical sketch with the pinned Arduino-Pico version.
+2. Resolve any target-only warnings or PIO syntax/generation issues.
+3. Flash one MCM board and validate all six encoder directions and buttons.
+4. Capture startup, snapshot, incremental update, reset, and RESYNC transactions.
 
-## Phase 3 — Wire the six controls
+## Next: timing qualification
 
-- Instantiate six encoder decoders.
-- Instantiate six button debouncers.
-- Poll them in the main loop.
-- Convert raw transition counts to detents.
-- Bind each encoder to parameter index 0–5.
-- Generate events only when authoritative state changes.
-- Keep encoder acceleration disabled.
+1. Measure worst/average main-loop execution.
+2. Sweep SPI clock until errors occur under simultaneous encoder activity.
+3. Set a conservative normative maximum SPI clock.
+4. Measure stack usage and prolonged-operation stability.
+5. Test FIFO pressure and IRQ latency.
 
-## Phase 4 — Implement coherent snapshots
+## Next: robustness
 
-- Add immutable `ControlSnapshot` capture.
-- Add `MSG_BUTTON_STATE`.
-- Add sequence ID and status flags.
-- Ensure the queue can atomically accept the entire response.
-- Prevent unrelated event interleaving.
-- Keep IRQ high through physical transfer of END.
+1. Add watchdog and reset-cause diagnostics.
+2. Add remote diagnostic/info packets.
+3. Add automated malformed-frame and brownout tests.
+4. Decide whether DMA or split PIO state machines are needed.
+5. Add release-version and hardware-revision discovery.
 
-## Phase 5 — Harden transport correctness
+## Next: formal compliance option
 
-- Track PIO-consumed versus physically clocked bytes.
-- Define idle MISO filler bytes.
-- Flush or invalidate stale PIO FIFO data during RESYNC.
-- Replace polled CS framing with PIO-generated frame markers or IRQs.
-- Add overflow and framing counters.
-
-## Phase 6 — Tests
-
-- Host-buildable CRC and packet unit tests.
-- Snapshot parser tests.
-- Event and TX queue boundary tests.
-- Quadrature transition table tests.
-- Button debounce timing tests.
-- Hardware-in-loop master/MCM transaction tests.
-- Logic-analyzer golden captures.
-
-## Phase 7 — Release process
-
-- Tag protocol and firmware versions together.
-- Generate a firmware binary and checksum.
-- Publish build toolchain/version information.
-- Record hardware revision compatibility.
-- Update changelog and ADRs for every interface change.
+1. Acquire/select the MISRA C++:2023 guideline and analyzer.
+2. Freeze native/adopted/generated scopes.
+3. Classify applicable rules.
+4. analyze the exact target build configuration;
+5. resolve findings and approve deviations;
+6. produce a guideline compliance summary;
+7. retain tool, compiler, test, and review evidence per release.
