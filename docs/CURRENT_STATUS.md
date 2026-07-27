@@ -1,65 +1,56 @@
-# Current Repository Status
+# Current Firmware Status
 
-## Executive summary
+## Implemented
 
-The repository now contains one canonical Arduino-Pico sketch at
-`src/MCM_Firmware/MCM_Firmware.ino`. The previous split root transport and
-historical Layer-A/Layer-D sketch trees are preserved under
-`archive/pre-misra-canonicalization/` and excluded from the native-code quality
-scope.
+The active firmware provides:
 
-The canonical implementation provides:
-
-- six live PIO-backed rotary encoders;
-- six explicit finite-state-machine button debouncers;
-- immutable control snapshots;
+- six PIO-backed rotary encoders;
+- six debounced push-buttons with long-hold state;
+- authoritative absolute control state;
+- immutable state snapshots;
 - fixed eight-byte SPI packets with CRC-8;
-- a nine-packet encoder/button snapshot;
-- checked bounded queues;
-- explicit application, snapshot, and receive-frame states;
-- deterministic RESYNC recovery;
-- diagnostic counters, including detected TX underrun;
+- nine-packet encoder/button snapshots;
+- explicit application, snapshot, button, and receive-frame state machines;
+- fixed-capacity queues with checked failures;
+- deterministic `RESYNC` recovery;
+- transport and recovery diagnostic counters;
 - no project-owned dynamic allocation;
-- host-buildable protocol and snapshot tests;
-- automated MPL and MISRA-like profile checks.
+- host-buildable protocol and state-machine tests;
+- automated licensing and native-source profile checks.
 
-## Classification
+## Qualification status
 
-| Area | Classification |
+| Area | Status |
 |---|---|
-| Canonical sketch layout | Implemented |
+| Active sketch layout | Implemented |
 | Six encoder scanning | Implemented |
 | Six button scanning | Implemented |
 | Atomic snapshot capture | Implemented |
 | Button-state packet | Implemented |
-| Explicit application FSM | Implemented |
-| Queue failure recovery | Implemented |
-| Native-code MISRA-like profile | Implemented |
-| Formal MISRA C++:2023 compliance claim | Not claimed |
+| Explicit application state machine | Implemented |
+| Queue-failure recovery | Implemented |
+| Native-source deterministic profile | Implemented |
+| Formal MISRA C++:2023 compliance | Not claimed |
 | Worst-case execution-time proof | Not complete |
-| Maximum supported SPI clock proof | Not complete |
+| Maximum supported SPI clock | Not complete |
 | Qualified static-analysis report | Not complete |
 | Hardware-in-loop conformance report | Not complete |
 
-## Important remaining limitations
+## Remaining engineering work
 
-1. The SPI PIO transport still depends on the CPU servicing split RX/TX FIFOs
-   quickly enough for the selected SPI clock. A measured maximum clock and
-   logic-analyzer evidence are still required.
-2. PIO assembly and generated PIO headers are outside the native C++ rule scope
-   and require separate review and test evidence.
-3. Arduino-Pico and the Pico SDK are adopted code. Their behavior is isolated
-   behind project modules but is not claimed as MISRA-conforming source.
-4. Diagnostic counters are internal and are not yet exposed through a
-   `GET_INFO` or diagnostics protocol response.
-5. Stack usage, loop worst-case timing, and brownout/watchdog recovery remain to
-   be measured on target hardware.
+1. Measure and publish the maximum supported SPI clock.
+2. Capture logic-analyzer evidence for framing, IRQ behavior, and underrun recovery.
+3. Measure worst-case loop time and stack high-water use on target hardware.
+4. Validate encoder direction, detent scaling, and button timing on production hardware.
+5. Validate watchdog, brownout, reset, and host-disconnect recovery.
+6. Expose diagnostic counters through a defined protocol response.
+7. Run a qualified MISRA-capable analyzer and approve any required deviations
+   before making a formal compliance claim.
 
-## Terminology
+## Terms
 
-- **Implemented:** behavior visible in the canonical source tree.
-- **MISRA-like:** project rules inspired by MISRA objectives but not a formal
-  compliance statement.
-- **Adopted code:** third-party or generated code used by the product but not
-  maintained under the complete native-code rule set.
-- **Qualification target:** evidence still required before production claims.
+- **Implemented:** behavior present in the active firmware.
+- **Engineering profile:** project rules enforced by source checks and review.
+- **Adopted code:** Arduino-Pico, Pico SDK, or generated code outside the complete
+  project-owned native-source rule scope.
+- **Qualification:** target-hardware evidence required before production claims.

@@ -1,0 +1,26 @@
+# Generated build output
+build/
+*.o
+*.obj
+*.elf
+*.map
+*.bin
+*.hex
+*.uf2
+
+# Local packaging
+*.zip
+*.tar
+*.tar.gz
+
+# Editor and operating-system files
+.DS_Store
+*~
+*.swp
+*.swo
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.pyc

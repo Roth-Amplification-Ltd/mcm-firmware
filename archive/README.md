@@ -1,8 +1,12 @@
-# Archived MCM Firmware Development Trees
+# Legacy Reference Source
 
-`pre-misra-canonicalization/` preserves the source layout that existed before
-the deterministic native-code consolidation. These files remain under
-MPL-2.0 and are retained for engineering history, comparison, and attribution.
+This directory contains superseded firmware experiments retained for comparison,
+attribution, and historical debugging.
 
-They are not canonical build targets and are excluded from the active
-MISRA-like native-code profile.
+Nothing under `archive/` is part of the active build. The supported firmware is:
+
+```text
+src/MCM_Firmware/MCM_Firmware.ino
+```
+
+Legacy files remain licensed under the terms stated in their source headers.
