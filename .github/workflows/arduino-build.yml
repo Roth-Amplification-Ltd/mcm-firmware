@@ -1,0 +1,37 @@
+# SPDX-FileCopyrightText: 2026 Roth Amplification Ltd
+# SPDX-License-Identifier: MPL-2.0
+
+name: Arduino RP2040 build
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  arduino-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache project Arduino toolchain
+        uses: actions/cache@v4
+        with:
+          path: .tools
+          key: mcm-arduino-${{ runner.os }}-cli-1.5.1-pico-5.6.0
+
+      - name: Install Arduino toolchain
+        run: ./setup.sh
+
+      - name: Build RP2040 UF2
+        run: ./build.sh
+
+      - name: Upload UF2 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcm-firmware-uf2
+          path: build/arduino/mcm-firmware.uf2
+          if-no-files-found: error

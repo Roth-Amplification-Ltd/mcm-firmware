@@ -2,18 +2,36 @@
 
 Firmware for the **Roth Amplification Modular Control Module (MCM)**, an
 RP2040-based six-encoder control surface that operates as an SPI peripheral for
-a separate host controller.
+an external host controller.
 
-The active Arduino-Pico sketch is:
+## Quick start
+
+The supported Arduino sketch is:
 
 ```text
 src/MCM_Firmware/MCM_Firmware.ino
 ```
 
+For a terminal build, install the project-local toolchain once and build:
+
+```bash
+./setup.sh
+./build.sh
+```
+
+The resulting firmware is:
+
+```text
+build/arduino/mcm-firmware.uf2
+```
+
+Arduino IDE instructions and exact board settings are in
+[Build and Flash](docs/BUILD_AND_FLASH.md).
+
 ## Hardware
 
 The MCM provides six Bourns PEC11L rotary encoders with integrated push-buttons.
-The board uses a 3.3 V, SPI-only host interface.
+The host interface is SPI-only and uses 3.3 V logic.
 
 | Signal | RP2040 GPIO | Direction | Notes |
 |---|---:|---|---|
@@ -75,7 +93,7 @@ and [Determinism and State Machines](docs/DETERMINISM.md).
 
 ## SPI protocol
 
-Each chip-select frame contains exactly one eight-byte packet:
+Each chip-select frame contains one eight-byte packet:
 
 | Byte | Field | Meaning |
 |---:|---|---|
@@ -105,29 +123,49 @@ SNAPSHOT_END
 See [SPI Wire Protocol](docs/SPI_PROTOCOL.md) and
 [Master Integration](docs/MASTER_INTEGRATION.md).
 
+## Build and test
+
+Install the pinned local Arduino toolchain:
+
+```bash
+./setup.sh
+```
+
+Build the target firmware and run the project checks:
+
+```bash
+./build.sh
+```
+
+Upload to a running board by serial port:
+
+```bash
+./upload.sh /dev/ttyACM0
+```
+
+Equivalent Make targets are available:
+
+```bash
+make setup
+make build
+make test
+make upload PORT=/dev/ttyACM0
+```
+
+The build uses the Generic RP2040 board definition configured for the MCM's
+W25Q16JV 2 MB QSPI flash. The exact FQBN and board options are maintained in
+`tools/arduino-common.sh`.
+
 ## Repository layout
 
 ```text
-src/MCM_Firmware/     Active firmware
+src/MCM_Firmware/     Active Arduino firmware
+build/arduino/        Generated UF2 and target-build products
 tests/host/           Host-side protocol and state-machine tests
-tools/                Source-policy and licensing checks
+tools/                Build and source-policy tools
 docs/                 Engineering documentation
 archive/              Legacy reference source; not a build target
 ```
-
-## Build and test
-
-Run the project checks:
-
-```bash
-python3 tools/check_license_headers.py
-python3 tools/check_misra_like.py
-bash tests/host/run.sh
-```
-
-Build and upload `src/MCM_Firmware/MCM_Firmware.ino` using the Earle Philhower
-Arduino-Pico core. Detailed instructions are in
-[Build and Flash](docs/BUILD_AND_FLASH.md).
 
 ## Documentation
 
